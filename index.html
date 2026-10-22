@@ -119,6 +119,19 @@ input[type=text]:focus{border-color:var(--accent)}
 .shapeBtn svg{width:30px;height:30px;display:block;margin:0 auto 6px;color:var(--accent)}
 .toggle{display:flex;align-items:center;gap:8px;margin-top:14px;font-size:13px;color:var(--muted)}
 .toggle input{accent-color:var(--accent);width:15px;height:15px}
+.tipsCard{width:min(540px,100%)}
+.tipsCard .btn{padding:11px 18px}
+.tipsKicker{font-size:12px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent)}
+.tipsTitle{font-size:22px;font-weight:800;margin:4px 0 14px;text-wrap:balance}
+.tipsList{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:12px}
+.tipsList li{display:flex;gap:12px;align-items:flex-start;font-size:14px;line-height:1.5;color:var(--muted)}
+.tipsList li b{color:var(--text)}
+.tipIcon{flex:none;width:34px;height:34px;border-radius:50%;background:#fff;border:1px solid var(--panel-border);color:var(--accent);display:grid;place-items:center}
+.tipIcon svg{width:18px;height:18px}
+.tipsSoft{font-size:12.5px;color:var(--muted);margin:14px 0 0}
+#tips .card{animation:tipsIn .25s ease-out}
+@keyframes tipsIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){#tips .card{animation:none}}
 .rules{margin:0 0 14px;font-size:13px;color:var(--muted);line-height:1.5}
 .rules summary{cursor:pointer;font-weight:700;color:var(--text)}
 .rules ul{margin:8px 0 0;padding-left:18px}
@@ -212,6 +225,33 @@ input[type=text]:focus{border-color:var(--accent)}
           <button class="btn ghost" id="practiceBtn" disabled>Practice <small>(recommended)</small></button>
         </div>
         <p class="note" id="setupNote">Add your name and photo to play.</p>
+      </div>
+    </div>
+
+    <div class="overlay hidden" id="tips">
+      <div class="card tipsCard">
+        <div class="tipsKicker">Quick tips before you start</div>
+        <div class="tipsTitle">Look closely, then draw in one go</div>
+        <ol class="tipsList">
+          <li>
+            <span class="tipIcon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></span>
+            <div><b>Memorise it first.</b> The shape shows for only 2 seconds. Take in its size, where it sits on the screen and which way it is turned. Your drawing is scored against exactly that.</div>
+          </li>
+          <li>
+            <span class="tipIcon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17c3-6 6-9 9-9s3 4 6 4 3-2 3-2"/><circle cx="3" cy="17" r="1.6" fill="currentColor"/></svg></span>
+            <div><b>Draw in one continuous stroke.</b> Press down, draw the whole shape, and only let go of the mouse button (or lift your finger) when you are done. Letting go ends the drawing.</div>
+          </li>
+          <li>
+            <span class="tipIcon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2"/><path d="M9 2h6"/></svg></span>
+            <div><b>Take your time, not too much.</b> You have 10 seconds per drawing. Finish closed shapes where you started.</div>
+          </li>
+        </ol>
+        <p class="tipsSoft">Slips are fine: a drawing that doesn't count gets a fresh peek and another try.</p>
+        <div class="actions">
+          <button class="btn" id="tipsGo">I'm ready, let's draw</button>
+          <button class="btn ghost" id="tipsPractice">Practice first</button>
+          <button class="btn ghost" id="tipsBack">Back</button>
+        </div>
       </div>
     </div>
 
@@ -625,7 +665,10 @@ function validate(){
 if (player.photo){ const img = new Image(); img.onload = () => { photo = { img, url:null, ox:img.width/2, oy:img.height/2, zoom:1 }; drawCropTo(cctx,160); }; img.src = player.photo; }
 else redrawCrop();
 
-$('#playBtn').onclick = () => startGame('score');
+$('#playBtn').onclick = () => { show('#tips'); $('#tipsGo').focus(); };
+$('#tipsGo').onclick = () => startGame('score');
+$('#tipsPractice').onclick = () => show('#practice');
+$('#tipsBack').onclick = () => show('#setup');
 $('#practiceBtn').onclick = () => show('#practice');
 $('#practiceBack').onclick = () => show('#setup');
 $('#againBtn').onclick = () => startGame('score');
