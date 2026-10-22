@@ -116,9 +116,15 @@ table.lb .lbName{white-space:nowrap;max-width:110px;overflow:hidden;text-overflo
 .fields label,.lbl{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;font-weight:600}
 input[type=text]{width:100%;font:inherit;font-size:15px;color:var(--text);background:#fff;border:1px solid var(--panel-border);border-radius:8px;padding:10px 12px;margin-top:2px;margin-bottom:14px;outline:none}
 input[type=text]:focus{border-color:var(--accent)}
-.swatches{display:flex;gap:6px;flex-wrap:wrap}
-.sw{width:22px;height:22px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px var(--panel-border);cursor:pointer;padding:0}
-.sw.on{box-shadow:0 0 0 2px var(--accent)}
+.fieldHint{font-size:12px;color:var(--muted);margin:-6px 0 0}
+.btnWrap{position:relative;display:inline-flex}
+.btnWrap.locked{cursor:not-allowed}
+.btnWrap.locked button{pointer-events:none}
+.btnWrap.locked::after{content:attr(data-tip);position:absolute;top:calc(100% + 9px);left:50%;transform:translate(-50%,-4px);background:var(--text);color:var(--canvas-text);font-size:12px;font-weight:600;padding:6px 10px;border-radius:6px;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .12s,transform .12s;z-index:2}
+.btnWrap.locked::before{content:'';position:absolute;top:calc(100% + 3px);left:50%;transform:translateX(-50%);border:6px solid transparent;border-bottom-color:var(--text);border-top:0;opacity:0;transition:opacity .12s;z-index:2}
+.btnWrap.locked:hover::after{opacity:1;transform:translate(-50%,0)}
+.btnWrap.locked:hover::before{opacity:1}
+#uploadBtn.nudge,#name.nudge{border-color:var(--accent);box-shadow:0 0 0 3px rgba(193,80,46,.18)}
 .shapeGrid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}
 .shapeBtn{font:inherit;color:var(--text);background:#fff;border:1px solid var(--panel-border);border-radius:10px;padding:12px 6px;cursor:pointer;font-size:12px}
 .shapeBtn:hover{border-color:var(--accent)}
@@ -227,18 +233,17 @@ input[type=text]:focus{border-color:var(--accent)}
           <div class="photoBox">
             <canvas id="crop" width="160" height="160" title="Drag to move"></canvas>
             <input type="range" id="zoom" min="1" max="4" step="0.01" value="1" aria-label="Zoom photo">
-            <label class="btn ghost small">Upload photo<input type="file" id="file" accept="image/*" hidden></label>
+            <label class="btn ghost small" id="uploadBtn">Upload photo<input type="file" id="file" accept="image/*" hidden></label>
           </div>
           <div class="fields">
             <label for="name">Your name</label>
             <input type="text" id="name" maxlength="40" placeholder="First name" autocomplete="given-name">
-            <div class="lbl">Ring colour</div>
-            <div class="swatches" id="swatches"></div>
+            <p class="fieldHint">Your photo ring gets a random colour.</p>
           </div>
         </div>
         <div class="actions">
-          <button class="btn" id="playBtn" disabled>Play for Score</button>
-          <button class="btn ghost" id="practiceBtn" disabled>Practice <small>(recommended)</small></button>
+          <span class="btnWrap" id="playWrap"><button class="btn" id="playBtn" disabled>Play for Score</button></span>
+          <span class="btnWrap" id="practiceWrap"><button class="btn ghost" id="practiceBtn" disabled>Practice <small>(recommended)</small></button></span>
         </div>
         <p class="note" id="setupNote">Add your name and photo to play.</p>
       </div>
@@ -674,20 +679,26 @@ crop.addEventListener('pointerup', endDrag); crop.addEventListener('pointercance
 
 $('#name').value = player.name;
 $('#name').oninput = e => { player.name = e.target.value; persistPlayer(); validate(); };
-function renderSwatches(){
-  $('#swatches').innerHTML = SWATCHES.map(c => `<button class="sw${c===player.color?' on':''}" style="background:${c}" data-c="${c}" aria-label="Ring colour"></button>`).join('');
-  document.documentElement.style.setProperty('--ring', player.color);
-}
-$('#swatches').onclick = e => { const c = e.target.dataset.c; if (!c) return; player.color = c; renderSwatches(); persistPlayer(); };
+// Ring colour is picked at random for each player (kept for their next visit); there is no picker.
+if (!SWATCHES.includes(player.color)) player.color = SWATCHES[Math.floor(Math.random()*SWATCHES.length)];
+function renderSwatches(){ document.documentElement.style.setProperty('--ring', player.color); persistPlayer(); }
 function persistPlayer(){ writeLS(LS_PLAYER, { name: player.name, photo: player.photo, color: player.color }); }
 function validate(){
   const ok = fmtName(player.name).length > 0 && !!player.photo;
   $('#playBtn').disabled = $('#practiceBtn').disabled = !ok;
+  const needName = !fmtName(player.name), needPhoto = !player.photo;
+  const tip = needName && needPhoto ? 'Add your name and upload a photo first' : needPhoto ? 'Upload a photo first' : needName ? 'Add your name first' : '';
+  for (const w of [$('#playWrap'), $('#practiceWrap')]){ w.classList.toggle('locked', !ok); w.dataset.tip = tip; }
   $('#setupNote').textContent = ok ? `Playing as ${fmtName(player.name)}. Scores are only saved after all ${ROUNDS} rounds.` : 'Add your name and photo to play.';
 }
 if (player.photo){ const img = new Image(); img.onload = () => { photo = { img, url:null, ox:img.width/2, oy:img.height/2, zoom:1 }; drawCropTo(cctx,160); }; img.src = player.photo; }
 else redrawCrop();
 
+// hovering a locked button also highlights what's missing
+for (const w of [$('#playWrap'), $('#practiceWrap')]){
+  w.addEventListener('mouseenter', () => { if (!w.classList.contains('locked')) return; if (!player.photo) $('#uploadBtn').classList.add('nudge'); if (!fmtName(player.name)) $('#name').classList.add('nudge'); });
+  w.addEventListener('mouseleave', () => { $('#uploadBtn').classList.remove('nudge'); $('#name').classList.remove('nudge'); });
+}
 $('#playBtn').onclick = () => { show('#tips'); $('#tipsGo').focus(); };
 $('#tipsGo').onclick = () => startGame('score');
 $('#tipsPractice').onclick = () => show('#practice');
