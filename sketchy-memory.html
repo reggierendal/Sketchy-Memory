@@ -1,0 +1,1018 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sketchy Memory · Happy Hour</title>
+<style>
+/* Type Blaster theme: cream page chrome + terracotta accents, dark brown play area with orange/gold glow.
+   Layout: Playing now (left) · drawing stage (centre) · leaderboard (right). */
+:root{
+  /* page chrome (xfusion.io palette) */
+  --bg:#F3EEE3;--panel:#FBF7EF;--panel-border:#E4DAC4;--accent:#C1502E;--accent2:#C8963A;--text:#221B15;--muted:#8B8479;
+  /* play area */
+  --canvas-bg:#17120D;--canvas-orange:#FF7A45;--canvas-gold:#FFC65C;--canvas-rust:#FF5C3D;--canvas-mint:#8FD16F;--canvas-text:#F5EFE3;--canvas-muted:#B8A88F;
+  --font:'Segoe UI',system-ui,-apple-system,sans-serif;
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:radial-gradient(ellipse at 50% 20%,#F8F2E6 0%,#F3EEE3 70%);color:var(--text);font-family:var(--font);overflow:hidden}
+.hidden{display:none!important}
+.app{display:grid;grid-template-columns:260px minmax(0,1fr) 310px;grid-template-areas:"play stage board";gap:14px;padding:12px;height:100vh}
+.panel{background:var(--panel);border:1px solid var(--panel-border);border-radius:14px;padding:16px 16px 10px;overflow:auto;box-shadow:0 4px 24px rgba(34,27,21,.08);min-height:0}
+#playPanel{grid-area:play;display:flex;flex-direction:column}
+#boardPanel{display:flex;flex-direction:column}
+.credit{margin-top:auto;padding-top:12px;border-top:1px solid var(--panel-border);font-size:11.5px;color:var(--muted);text-align:center}
+.credit a{color:var(--accent);text-decoration:none;font-weight:600}
+.credit a:hover{text-decoration:underline}
+#muteBtn{position:absolute;left:12px;bottom:12px;z-index:3;width:32px;height:32px;border-radius:50%;background:rgba(20,14,8,.75);border:1px solid #3A2E22;color:var(--canvas-muted);font-size:14px;line-height:1;cursor:pointer;display:grid;place-items:center;padding:0}
+#muteBtn:hover{border-color:var(--canvas-orange);color:var(--canvas-text)}
+#muteBtn:focus-visible{outline:2px solid var(--canvas-gold);outline-offset:2px}
+.brandFoot{margin-top:auto;padding-top:14px;border-top:1px solid var(--panel-border);display:flex;justify-content:center}
+.brandFoot img{width:110px;max-width:100%;height:auto;display:block}#boardPanel{grid-area:board}.stage{grid-area:stage}
+.panel h2{font-size:13px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);margin:0 0 10px;display:flex;align-items:center;gap:8px}
+.panel h2 .count{margin-left:auto;color:var(--muted);font-weight:600;letter-spacing:0;font-variant-numeric:tabular-nums}
+.live{width:8px;height:8px;border-radius:50%;background:#E5392A;animation:livePulse 1.6s infinite}
+@keyframes livePulse{0%,100%{opacity:1}50%{opacity:.5}}
+.badge{font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;border:1px solid var(--panel-border);color:var(--muted);border-radius:99px;padding:2px 7px;background:#fff}
+.empty{color:var(--muted);font-size:12px;padding:8px 4px;line-height:1.4;text-align:center}
+.note{color:var(--muted);font-size:12px;line-height:1.45;margin:10px 0 0}
+#demoNote{background:#fff;border:1px solid var(--panel-border);border-radius:8px;padding:8px 10px;margin-top:12px}
+
+.row{display:flex;align-items:center;gap:10px;padding:6px 6px;border-bottom:1px solid var(--panel-border)}
+.row:last-child{border-bottom:0}
+.rank{width:24px;text-align:center;color:var(--muted);font-size:13px;flex:none;font-variant-numeric:tabular-nums}
+.medal{font-size:16px}
+.who{min-width:0;flex:1}
+.who b{display:block;font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sub{font-size:11px;color:var(--muted)}
+.pts{font-weight:800;text-align:right;font-variant-numeric:tabular-nums}
+.pts small{display:block;font-weight:500;color:var(--muted);font-size:10px}
+.avatar{width:32px;height:32px;border-radius:50%;border:2px solid var(--ring,#888);object-fit:cover;flex:none;background:#1D1710;display:grid;place-items:center;font-weight:700;font-size:13px;color:#fff}
+.avatar.sm{width:20px;height:20px;font-size:10px}
+
+table.lb{width:100%;border-collapse:collapse;font-size:13px}
+table.lb th{text-align:left;color:var(--muted);font-weight:600;padding:6px 5px;border-bottom:1px solid var(--panel-border);font-size:12px}
+table.lb td{padding:5px 5px;border-bottom:1px solid var(--panel-border);color:var(--text);font-variant-numeric:tabular-nums;vertical-align:middle}
+table.lb tbody tr:first-child td{color:var(--accent2);font-weight:700}
+table.lb tbody tr:nth-child(2) td{color:#4A3B2A;font-weight:600}
+table.lb tbody tr[data-i]:hover td{background:#fff}
+table.lb .rank{width:28px;color:var(--muted);text-align:left}
+table.lb .lbPhoto{width:30px;padding:2px 4px}
+table.lb .lbName{white-space:nowrap;max-width:110px;overflow:hidden;text-overflow:ellipsis}
+.lbEmpty{color:var(--muted)!important;text-align:center;padding:14px!important;font-weight:400!important}
+.lbBest{display:inline-block;width:18px;height:18px;color:var(--accent);vertical-align:middle}
+.lbBest svg{width:18px;height:18px;display:block}
+#playList{display:flex;flex-direction:column;gap:5px}
+.liveRow{display:flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--panel-border);border-radius:8px;padding:4px 8px;color:var(--text)}
+.liveAv{line-height:0;flex:none}
+.liveTxt{flex:1;display:flex;flex-direction:column;line-height:1.2;min-width:0}
+.liveTxt b{font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.liveTxt small{font-size:11px;color:var(--muted)}
+.liveDot{width:8px;height:8px;border-radius:50%;background:#E5392A;flex-shrink:0;animation:livePulse 1.6s infinite}
+.liveEmpty{font-size:12px;color:var(--muted);text-align:center;padding:8px 4px;line-height:1.4}
+.champs{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:5px;margin-bottom:14px}
+.champ{background:#fff;border:1px solid var(--panel-border);border-radius:10px;padding:6px 4px;text-align:center;font-size:11px;color:var(--muted)}
+.champ svg{width:22px;height:22px;display:block;margin:0 auto 2px;color:var(--accent)}
+.champ .v{color:var(--text);font-weight:800;font-size:12px;font-variant-numeric:tabular-nums}
+.champ .avatar{margin:3px auto 0}
+
+.stage{position:relative;border-radius:14px;border:1px solid #2A2018;overflow:hidden;background:linear-gradient(180deg,#1D1710 0%,#120D09 100%);box-shadow:0 0 60px rgba(255,122,69,.10),inset 0 0 120px rgba(255,122,69,.04);min-height:0}
+#board{position:absolute;inset:0;width:100%;height:100%;touch-action:none;display:block;cursor:crosshair}
+.hud{position:absolute;top:0;left:0;right:0;display:flex;justify-content:space-between;align-items:center;padding:14px 20px;pointer-events:none;font-size:14px;gap:10px;color:var(--canvas-muted);letter-spacing:.5px}
+.hud b{color:var(--canvas-orange);font-size:17px}
+.hud .r{display:flex;align-items:center;gap:10px}
+#hudRight{color:var(--canvas-text);font-weight:700;font-variant-numeric:tabular-nums}
+#hint{position:absolute;top:58px;left:12px;right:12px;text-align:center;font-size:18px;letter-spacing:.5px;pointer-events:none;color:var(--canvas-muted);transition:color .2s}
+#hint.bad{color:var(--canvas-rust);font-weight:700}
+#hint.gold{color:var(--canvas-gold);text-shadow:0 0 12px rgba(255,198,92,.5)}
+
+.btn{font:inherit;font-weight:700;border:0;border-radius:8px;padding:12px 26px;cursor:pointer;background:var(--accent);color:#fff;letter-spacing:.5px;box-shadow:0 4px 16px rgba(193,80,46,.30);pointer-events:auto;transition:transform .1s ease}
+.btn:hover{transform:translateY(-1px)}
+.btn:focus-visible{outline:2px solid var(--canvas-gold);outline-offset:2px}
+.btn:disabled{opacity:.4;cursor:not-allowed;transform:none}
+.btn.ghost{background:transparent;border:1px solid var(--panel-border);color:var(--text);box-shadow:none}
+.btn.small{padding:8px 14px;font-size:13px}
+.btn.tiny{padding:5px 10px;font-size:12px;border-radius:8px}
+.hud .btn.ghost,#revealBar .btn.ghost{color:var(--canvas-text);border-color:#6B5A46;background:rgba(255,255,255,.04)}
+.hud .btn.ghost:hover,#revealBar .btn.ghost:hover{border-color:var(--canvas-orange)}
+.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
+
+.overlay{position:absolute;inset:0;display:grid;place-items:center;background:rgba(20,14,8,.90);padding:16px;overflow:auto;z-index:5}
+.card{width:min(520px,100%);background:var(--panel);color:var(--text);border:1px solid var(--panel-border);border-radius:12px;padding:22px 26px}
+.card.wide{width:min(760px,100%)}
+.brand{font-size:34px;font-weight:800;letter-spacing:2px;line-height:1.1;background:linear-gradient(90deg,var(--canvas-orange),var(--canvas-gold));-webkit-background-clip:text;background-clip:text;color:transparent}
+.brand span{display:block;font-size:12px;color:var(--accent);letter-spacing:.14em;text-transform:uppercase;margin-top:6px;font-weight:700;-webkit-text-fill-color:var(--accent)}
+.lead{color:var(--muted);margin:10px 0 14px;line-height:1.5;font-size:14px}
+.today{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px}
+.chip{display:flex;align-items:center;gap:6px;background:#fff;border:1px solid var(--panel-border);border-radius:99px;padding:4px 10px 4px 6px;font-size:12px}
+.chip svg{width:18px;height:18px;color:var(--accent)}
+.form{display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap}
+.photoBox{display:flex;flex-direction:column;align-items:center;gap:8px;width:140px}
+#crop{width:112px;height:112px;border-radius:50%;background:radial-gradient(circle at 50% 35%,#2A2018,#120D09);cursor:grab;touch-action:none;border:3px solid var(--ring,#888)}
+#zoom{width:112px;accent-color:var(--accent)}
+.fields{flex:1;min-width:200px}
+.fields label,.lbl{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;font-weight:600}
+input[type=text]{width:100%;font:inherit;font-size:15px;color:var(--text);background:#fff;border:1px solid var(--panel-border);border-radius:8px;padding:10px 12px;margin-top:2px;margin-bottom:14px;outline:none}
+input[type=text]:focus{border-color:var(--accent)}
+.fieldHint{font-size:12px;color:var(--muted);margin:-6px 0 0}
+.btnWrap{position:relative;display:inline-flex}
+.btnWrap.locked{cursor:not-allowed}
+.btnWrap.locked button{pointer-events:none}
+.btnWrap.locked::after{content:attr(data-tip);position:absolute;top:calc(100% + 9px);left:50%;transform:translate(-50%,-4px);background:var(--text);color:var(--canvas-text);font-size:12px;font-weight:600;padding:6px 10px;border-radius:6px;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .12s,transform .12s;z-index:2}
+.btnWrap.locked::before{content:'';position:absolute;top:calc(100% + 3px);left:50%;transform:translateX(-50%);border:6px solid transparent;border-bottom-color:var(--text);border-top:0;opacity:0;transition:opacity .12s;z-index:2}
+.btnWrap.locked:hover::after{opacity:1;transform:translate(-50%,0)}
+.btnWrap.locked:hover::before{opacity:1}
+#uploadBtn.nudge,#name.nudge{border-color:var(--accent);box-shadow:0 0 0 3px rgba(193,80,46,.18)}
+.shapeGrid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}
+.shapeBtn{font:inherit;color:var(--text);background:#fff;border:1px solid var(--panel-border);border-radius:10px;padding:12px 6px;cursor:pointer;font-size:12px}
+.shapeBtn:hover{border-color:var(--accent)}
+.shapeBtn svg{width:30px;height:30px;display:block;margin:0 auto 6px;color:var(--accent)}
+.toggle{display:flex;align-items:center;gap:8px;margin-top:14px;font-size:13px;color:var(--muted)}
+.toggle input{accent-color:var(--accent);width:15px;height:15px}
+.tipsCard{width:min(540px,100%)}
+.tipsCard .btn{padding:11px 18px}
+.tipsKicker{font-size:12px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent)}
+.tipsTitle{font-size:22px;font-weight:800;margin:4px 0 14px;text-wrap:balance}
+.tipsList{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:12px}
+.tipsList li{display:flex;gap:12px;align-items:flex-start;font-size:14px;line-height:1.5;color:var(--muted)}
+.tipsList li b{color:var(--text)}
+.tipIcon{flex:none;width:34px;height:34px;border-radius:50%;background:#fff;border:1px solid var(--panel-border);color:var(--accent);display:grid;place-items:center}
+.tipIcon svg{width:18px;height:18px}
+.tipsSoft{font-size:12.5px;color:var(--muted);margin:14px 0 0}
+#tips .card{animation:tipsIn .25s ease-out}
+@keyframes tipsIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){#tips .card{animation:none}}
+.rules{margin:0 0 14px;font-size:13px;color:var(--muted);line-height:1.5}
+.rules summary{cursor:pointer;font-weight:700;color:var(--text)}
+.rules ul{margin:8px 0 0;padding-left:18px}
+.rules li+li{margin-top:3px}
+.rules b{color:var(--text)}
+.btn small{font-weight:500;opacity:.8}
+
+.total{font-size:54px;font-weight:800;color:var(--accent);line-height:1;margin:6px 0 14px;font-variant-numeric:tabular-nums}
+.total small{font-size:18px;color:var(--muted);margin-left:6px}
+.grid5{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+.mini{background:#17120D;border:1px solid #2A2018;border-radius:10px;padding:6px;text-align:center;color:var(--canvas-text)}
+.mini canvas{width:100%;aspect-ratio:1;display:block;max-width:100%}
+.mini .v{font-weight:800;color:var(--canvas-gold);font-variant-numeric:tabular-nums}
+.mini .sub{font-size:11px;color:var(--canvas-muted)}
+
+#revealBar{position:absolute;left:50%;bottom:16px;transform:translateX(-50%);display:flex;align-items:center;gap:18px;background:rgba(20,14,8,.85);border:1px solid #3A2E22;border-radius:14px;padding:10px 12px 10px 18px;z-index:4;max-width:calc(100% - 24px);color:var(--canvas-text)}
+#revealBar .sub{color:var(--canvas-muted)}
+#revealBar .actions{margin:0}
+#bigScore{font-size:34px;font-weight:800;line-height:1;color:var(--canvas-gold);text-shadow:0 0 14px rgba(255,198,92,.45);font-variant-numeric:tabular-nums}
+#bigScore small{font-size:16px;color:var(--canvas-muted);text-shadow:none}
+
+#zoomCard{position:fixed;z-index:60;pointer-events:none;background:var(--panel);border:1px solid var(--panel-border);border-radius:14px;padding:10px 12px 9px;box-shadow:0 10px 30px rgba(34,27,21,.22);text-align:center;width:146px;animation:zoomIn .14s ease-out}
+@keyframes zoomIn{from{opacity:0;transform:scale(.92)}to{opacity:1;transform:none}}
+.zoomPic{width:112px;height:112px;margin:0 auto;border-radius:50%;border:3px solid var(--ring,#888);overflow:hidden;background:#1D1710}
+.zoomPic img{width:100%;height:100%;object-fit:cover;display:block}
+.zoomInitial{width:100%;height:100%;display:grid;place-items:center;font-size:42px;font-weight:800;color:#fff}
+.zoomName{font-weight:800;font-size:14px;margin-top:7px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.zoomNote{font-size:11px;color:var(--muted);margin-top:1px}
+.zoomable{cursor:zoom-in}
+@media (prefers-reduced-motion:reduce){#zoomCard{animation:none}}
+#peekCard{position:fixed;z-index:50;background:#1D1710;border:1px solid #3A2E22;border-radius:12px;padding:6px;pointer-events:none;box-shadow:0 10px 36px rgba(0,0,0,.35);text-align:center}
+#peekCard canvas{width:160px;height:160px;display:block;background:#120D09;border-radius:8px}
+#peekCard .sub{color:var(--canvas-text);font-weight:700;margin-top:4px}
+
+@media (prefers-reduced-motion:reduce){.live,.liveDot{animation:none}.btn{transition:none}}
+@media (max-width:1000px){
+  body{overflow:auto}
+  .app{grid-template-columns:1fr;grid-template-areas:"stage" "board" "play";height:auto}
+  .stage{height:78vh;min-height:460px}
+  .grid5{grid-template-columns:repeat(3,1fr)}
+}
+@media (max-width:520px){
+  .shapeGrid{grid-template-columns:repeat(3,1fr)}
+  #revealBar{flex-direction:column;gap:8px;padding:10px}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="panel" id="playPanel">
+    <h2>🟢 Playing now</h2>
+    <div id="playList"></div>
+    <div class="brandFoot"><img src="data:image/png;base64,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" alt="xFusion"></div>
+  </aside>
+
+  <main class="stage" id="stage">
+    <canvas id="board"></canvas>
+    <div class="hud"><div id="hudLeft"></div><div class="r"><span id="hudRight"></span><button class="btn ghost tiny hidden" id="quitBtn">Quit</button></div></div>
+    <div id="hint"></div>
+    <button id="muteBtn" type="button" aria-label="Sound">🔊</button>
+
+    <div id="revealBar" class="hidden">
+      <div><div class="sub" id="revLabel"></div><div id="bigScore">0.0</div></div>
+      <div class="actions" id="revActions"></div>
+    </div>
+
+    <div class="overlay" id="setup">
+      <div class="card">
+        <div class="brand">Sketchy Memory<span>Happy Hour Edition</span></div>
+        <p class="lead">Each shape flashes for 2 seconds. Then the lights go out and you draw it from memory, same size, same spot, in <b style="color:var(--text)">one continuous stroke</b>. Five rounds, scored out of 500.</p>
+        <details class="rules" id="rules">
+          <summary>How to play</summary>
+          <ul>
+            <li><b>Peek:</b> a shape appears for 2 seconds. Remember its shape, size, position and angle.</li>
+            <li><b>Draw:</b> the screen goes dark. Press down and draw the whole shape in <b>one continuous stroke, without lifting the mouse button</b> (or your finger). Lifting ends your drawing.</li>
+            <li>You have 10 seconds per drawing. Closed shapes must finish where they started.</li>
+            <li><b>Reveal:</b> the real shape appears under your drawing, and you score up to 100 for each round.</li>
+            <li>Drawings that are too short, too small, too slow or not closed don't count. You get a fresh peek and try again.</li>
+            <li>Five rounds: straight line, circle, square, heart and infinity, in a different order each day. Your total out of 500 goes on the leaderboard. Everyone gets the same shapes today.</li>
+            <li><b>Accuracy</b> is how close your drawings were: your score as a percentage of 500. For example, 375.4 / 500 is 75.1%.</li>
+            <li>New here? Try <b>Practice</b> first. It is never saved.</li>
+          </ul>
+        </details>
+        <div class="lbl" id="todayLbl">Today's shapes</div>
+        <div class="today" id="today"></div>
+        <div class="form">
+          <div class="photoBox">
+            <canvas id="crop" width="160" height="160" title="Drag to move"></canvas>
+            <input type="range" id="zoom" min="1" max="4" step="0.01" value="1" aria-label="Zoom photo">
+            <label class="btn ghost small" id="uploadBtn">Upload photo<input type="file" id="file" accept="image/*" hidden></label>
+          </div>
+          <div class="fields">
+            <label for="name">Your name</label>
+            <input type="text" id="name" maxlength="40" placeholder="First name" autocomplete="given-name">
+            <p class="fieldHint">Your photo ring gets a random colour.</p>
+          </div>
+        </div>
+        <div class="actions">
+          <span class="btnWrap" id="playWrap"><button class="btn" id="playBtn" disabled>Play for Score</button></span>
+          <span class="btnWrap" id="practiceWrap"><button class="btn ghost" id="practiceBtn" disabled>Practice <small>(recommended)</small></button></span>
+        </div>
+        <p class="note" id="setupNote">Add your name and photo to play.</p>
+      </div>
+    </div>
+
+    <div class="overlay hidden" id="tips">
+      <div class="card tipsCard">
+        <div class="tipsKicker">Quick tips before you start</div>
+        <div class="tipsTitle">Look closely, then draw in one go</div>
+        <ol class="tipsList">
+          <li>
+            <span class="tipIcon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></span>
+            <div><b>Memorise it first.</b> The shape shows for only 2 seconds. Take in its size, where it sits on the screen and which way it is turned. Your drawing is scored against exactly that.</div>
+          </li>
+          <li>
+            <span class="tipIcon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17c3-6 6-9 9-9s3 4 6 4 3-2 3-2"/><circle cx="3" cy="17" r="1.6" fill="currentColor"/></svg></span>
+            <div><b>Draw in one continuous stroke.</b> Press down, draw the whole shape, and only let go of the mouse button (or lift your finger) when you are done. Letting go ends the drawing.</div>
+          </li>
+          <li>
+            <span class="tipIcon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2"/><path d="M9 2h6"/></svg></span>
+            <div><b>Take your time, not too much.</b> You have 10 seconds per drawing. Finish closed shapes where you started.</div>
+          </li>
+        </ol>
+        <p class="tipsSoft">Slips are fine: a drawing that doesn't count gets a fresh peek and another try.</p>
+        <div class="actions">
+          <button class="btn" id="tipsGo">I'm ready, let's draw</button>
+          <button class="btn ghost" id="tipsPractice">Practice first</button>
+          <button class="btn ghost" id="tipsBack">Back</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="overlay hidden" id="practice">
+      <div class="card">
+        <div class="brand" style="font-size:22px">Practice</div>
+        <p class="lead">Pick a shape. Practice is never saved.</p>
+        <div class="shapeGrid" id="shapeGrid"></div>
+        <label class="toggle"><input type="checkbox" id="blind" checked> Draw in the dark</label>
+        <div class="actions"><button class="btn ghost" id="practiceBack">Back</button></div>
+      </div>
+    </div>
+
+    <div class="overlay hidden" id="results">
+      <div class="card wide">
+        <div class="sub" id="resMode">Game over</div>
+        <div class="total"><span id="resTotal">0</span><small>/ 500</small></div>
+        <div class="grid5" id="resGrid"></div>
+        <p class="note" id="resNote"></p>
+        <div class="actions">
+          <button class="btn" id="againBtn">Play again</button>
+          <button class="btn ghost" id="resPractice">Practice</button>
+          <button class="btn ghost" id="resMenu">Menu</button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <aside class="panel" id="boardPanel">
+    <h2>Shape champions</h2>
+    <div class="champs" id="champs"></div>
+    <h2>🏆 Leaderboard</h2>
+    <table class="lb">
+      <thead><tr><th class="rank">#</th><th class="lbPhoto"></th><th>Name</th><th>Score</th><th>Acc</th><th>Best</th></tr></thead>
+      <tbody id="boardBody"></tbody>
+    </table>
+    <p class="note hidden" id="demoNote"><span class="badge" id="demoBadge">Demo mode</span><br><span id="demoText">Scores are saved in this browser only. Open a second tab to see "Playing now" update. Add the Supabase URL and key at the top of the script to share with everyone.</span></p>
+    <div class="credit">Inspired by <a href="https://neal.fun/perfect-circle/" target="_blank" rel="noopener">neal.fun/perfect-circle</a></div>
+</aside>
+</div>
+<div id="zoomCard" class="hidden" aria-hidden="true"></div>
+<div id="peekCard" class="hidden"><canvas width="320" height="320"></canvas><div class="sub" id="peekLabel"></div></div>
+
+<script>
+/* ================= Config ================= */
+const SUPABASE_URL = 'https://mzncpsdvkfgxzcjujnge.supabase.co';   // Sketchy Memory's own Supabase project
+const SUPABASE_KEY = 'sb_publishable_uiiT8UKXLckgc3YNpud3mA_dyDSGqra';   // publishable key (safe to include)
+const SHAPE_MODE = 'event'; // 'event' = everyone gets the same 5 shapes today, 'random' = a new 5 each game
+const ROUNDS = 5, PEEK_MS = 2000, MAX_DRAW_MS = 10000;
+
+/* ================= Handbook bridge ================= */
+// Add the handbook's exact origin, e.g. 'https://handbook.xfusion.io'. Until set, all messages are ignored.
+const HANDBOOK_ORIGINS = [];
+
+/* ================= Helpers ================= */
+const $ = s => document.querySelector(s);
+const rand = (a,b) => a + Math.random()*(b-a);
+const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
+const now = () => performance.now();
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmtName = n => { const w = String(n||'').trim().split(/\s+/)[0] || ''; return w.charAt(0).toUpperCase() + w.slice(1); };
+const SWATCHES = ['#FF5C3D','#FF7A45','#FFC65C','#8FD16F','#4ECDE1','#5B8CFF','#A46BFF','#FF6BD6'];
+const LS_PLAYER = 'perfect-shapes-player', LS_SCORES = 'perfect-shapes-scores', LS_SEEDED = 'perfect-shapes-seeded';
+const readLS = (k,d) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } };
+const writeLS = (k,v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
+const MY_ID = Math.random().toString(36).slice(2, 10);
+
+function pathLen(p){ let L=0; for(let i=1;i<p.length;i++) L+=Math.hypot(p[i][0]-p[i-1][0], p[i][1]-p[i-1][1]); return L; }
+function resample(pts, n){
+  if (pts.length < 2) return Array.from({length:n}, () => (pts[0]||[0,0]).slice());
+  const p = pts.map(q => q.slice()), I = pathLen(p)/(n-1), out = [p[0].slice()];
+  if (!I) return Array.from({length:n}, () => p[0].slice());
+  let D = 0;
+  for (let i=1;i<p.length;i++){
+    const d = Math.hypot(p[i][0]-p[i-1][0], p[i][1]-p[i-1][1]);
+    if (d > 0 && D + d >= I){
+      const t = (I-D)/d, q = [p[i-1][0]+t*(p[i][0]-p[i-1][0]), p[i-1][1]+t*(p[i][1]-p[i-1][1])];
+      out.push(q); p.splice(i, 0, q); D = 0;
+    } else D += d;
+  }
+  while (out.length < n) out.push(p[p.length-1].slice());
+  return out.slice(0, n);
+}
+function segDist(px,py,a,b){
+  const dx=b[0]-a[0], dy=b[1]-a[1], l=dx*dx+dy*dy;
+  const t = l ? clamp(((px-a[0])*dx+(py-a[1])*dy)/l, 0, 1) : 0;
+  return Math.hypot(px-(a[0]+t*dx), py-(a[1]+t*dy));
+}
+function polyDist(pt, poly){ let m=Infinity; for(let i=1;i<poly.length;i++){ const d=segDist(pt[0],pt[1],poly[i-1],poly[i]); if(d<m) m=d; } return m; }
+function bbox(p){ let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity; for(const [x,y] of p){ if(x<x0)x0=x; if(y<y0)y0=y; if(x>x1)x1=x; if(y>y1)y1=y; } return {x0,y0,x1,y1,w:x1-x0,h:y1-y0}; }
+function mulberry(a){ return () => { a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+function hashStr(s){ let h=2166136261; for(const c of s){ h^=c.charCodeAt(0); h=Math.imul(h,16777619); } return h>>>0; }
+
+/* ================= Shapes ================= */
+const ring = (n, f) => Array.from({length:n+1}, (_, i) => f(i/n*Math.PI*2));
+const SHAPES = {
+  line:     { label:'Straight line', closed:false, rot:[0,Math.PI],       gen:() => [[-1,0],[1,0]] },
+  circle:   { label:'Circle',        closed:true,  rot:[0,0],             gen:() => ring(128, t => [Math.cos(t), Math.sin(t)]) },
+  square:   { label:'Square',        closed:true,  rot:[0,Math.PI/2],     gen:() => [[-1,-1],[1,-1],[1,1],[-1,1],[-1,-1]] },
+  heart:    { label:'Heart',         closed:true,  rot:[-.3,.3],          gen:() => ring(200, t => [16*Math.sin(t)**3, -(13*Math.cos(t)-5*Math.cos(2*t)-2*Math.cos(3*t)-Math.cos(4*t))]) },
+  star:     { label:'Star',          closed:true,  rot:[0,Math.PI*2/5],   gen:() => Array.from({length:11}, (_, i) => { const a=-Math.PI/2+i*Math.PI/5, r=i%2?0.42:1; return [r*Math.cos(a), r*Math.sin(a)]; }) },
+  infinity: { label:'Infinity',      closed:true,  rot:[-.5,.5],          gen:() => ring(200, t => { const d=1+Math.sin(t)**2; return [Math.cos(t)/d, Math.sin(t)*Math.cos(t)/d]; }) },
+  spiral:   { label:'Spiral',        closed:false, rot:[0,Math.PI*2],     gen:() => { const T=Math.PI*6; return Array.from({length:301}, (_, i) => { const t=i/300*T, r=t/T; return [r*Math.cos(t), r*Math.sin(t)]; }); } },
+};
+const SHAPE_KEYS = Object.keys(SHAPES);
+// Shapes in play for this batch. Star and spiral are parked for a later batch: add them back here to switch them on.
+const ACTIVE_SHAPES = ['line', 'circle', 'square', 'heart', 'infinity'];
+for (const k of SHAPE_KEYS){
+  const s = SHAPES[k], p = s.gen(), b = bbox(p), cx = (b.x0+b.x1)/2, cy = (b.y0+b.y1)/2;
+  const c = p.map(([x,y]) => [x-cx, y-cy]), m = Math.max(...c.map(([x,y]) => Math.hypot(x,y)));
+  s.base = resample(c.map(([x,y]) => [x/m, y/m]), 256);
+}
+function shapeSvg(k){
+  const d = SHAPES[k].base.filter((_, i) => i%4===0 || i===255).map(([x,y], i) => (i?'L':'M') + (12+x*9).toFixed(1) + ' ' + (12+y*9).toFixed(1)).join('');
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"><path d="${d}"/></svg>`;
+}
+function pickShapes(){
+  const rng = SHAPE_MODE === 'event' ? mulberry(hashStr(new Date().toLocaleDateString('en-CA'))) : Math.random;
+  const a = ACTIVE_SHAPES.slice();
+  for (let i=a.length-1;i>0;i--){ const j=Math.floor(rng()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; }
+  return a.slice(0, ROUNDS);
+}
+
+/* ================= Scoring ================= */
+function evaluate(stroke, target, L){
+  const u = resample(stroke, 96), t = resample(target, 96), tp = resample(target, 192), sp = resample(stroke, 192);
+  let a=0; for (const q of u) a += polyDist(q, tp); a /= u.length;   // precision: how far you strayed
+  let b=0; for (const q of t) b += polyDist(q, sp); b /= t.length;   // coverage: how much of the shape you drew
+  return Math.round(clamp(100*(1 - ((a+2*b)/3)/(0.45*L)), 0, 100)*10)/10;   // coverage weighs double
+}
+const colorFor = (d, L) => `hsl(${(120*clamp(1-d/(0.3*L),0,1)).toFixed(0)} 90% 58%)`;
+
+/* ================= Canvas ================= */
+const canvas = $('#board'), ctx = canvas.getContext('2d');
+let W=0, H=0, DPR=1, stars=[];
+function resize(){
+  const r = canvas.getBoundingClientRect(), oldW = W, oldH = H;
+  DPR = Math.min(window.devicePixelRatio||1, 2); W = r.width; H = r.height;
+  canvas.width = Math.round(W*DPR); canvas.height = Math.round(H*DPR);
+  stars = Array.from({length: Math.round(W*H/5000)}, () => [Math.random()*W, Math.random()*H, Math.random()*1.3+.2, Math.random()]);
+  if (R && (R.phase==='peek' || R.phase==='dark') && (Math.abs(oldW-W)>40 || Math.abs(oldH-H)>40)) startRound();
+}
+addEventListener('resize', resize);
+
+function strokePath(c, pts, color, width, glow){
+  if (pts.length < 2) return;
+  c.save(); c.lineJoin='round'; c.lineCap='round'; c.strokeStyle=color; c.lineWidth=width;
+  if (glow){ c.shadowColor=color; c.shadowBlur=glow; }
+  c.beginPath(); c.moveTo(pts[0][0], pts[0][1]); for (let i=1;i<pts.length;i++) c.lineTo(pts[i][0], pts[i][1]); c.stroke(); c.restore();
+}
+function strokeColored(c, pts, cols, width){
+  c.save(); c.lineJoin='round'; c.lineCap='round'; c.lineWidth=width;
+  for (let i=1;i<pts.length;i++){ c.strokeStyle=cols[i]; c.beginPath(); c.moveTo(pts[i-1][0], pts[i-1][1]); c.lineTo(pts[i][0], pts[i][1]); c.stroke(); }
+  c.restore();
+}
+function drawReveal(c, t, u, L, alpha=1, w=4){
+  c.save(); c.globalAlpha = alpha; strokePath(c, t, '#FFC65C', Math.max(2, w*.75), 14); c.restore();
+  strokeColored(c, u, u.map(p => colorFor(polyDist(p, t), L)), w);
+}
+function fitTo(t, u, L, size, pad){
+  const b = bbox(t.concat(u)), sc = (size-2*pad)/Math.max(b.w, b.h, 1);
+  const ox = pad + ((size-2*pad) - b.w*sc)/2, oy = pad + ((size-2*pad) - b.h*sc)/2;
+  const m = p => [ox+(p[0]-b.x0)*sc, oy+(p[1]-b.y0)*sc];
+  return { t: t.map(m), u: u.map(m), L: L*sc };
+}
+function makeBest(key, score, t, u, L){
+  const f = fitTo(resample(t,64), resample(u,64), L, 100, 8), r = p => [Math.round(p[0]), Math.round(p[1])];
+  return { k:key, s:score, t:f.t.map(r), u:f.u.map(r), L:Math.round(f.L) };
+}
+
+/* ================= Game state ================= */
+let game = null, R = null, darkAmt = 0;
+function makeTarget(key){
+  const s = SHAPES[key], pad = 26, top = 92, bottom = 26;
+  let L = Math.min(W, H) * rand(.2, .32);
+  L = Math.max(30, Math.min(L, (W-2*pad)/2, (H-top-bottom)/2));
+  const x = W-2*L-2*pad > 0 ? rand(L+pad, W-L-pad) : W/2;
+  const y = H-2*L-top-bottom > 0 ? rand(L+top, H-L-bottom) : (top+H-bottom)/2;
+  const r = rand(s.rot[0], s.rot[1]), c = Math.cos(r), sn = Math.sin(r);
+  const pts = s.base.map(([px,py]) => [x+L*(px*c-py*sn), y+L*(px*sn+py*c)]);
+  return { key, L, pts, len: pathLen(pts) };
+}
+function startGame(mode, shape){
+  hideZoom(); peek.classList.add('hidden');
+  hideOverlays();
+  if (mode === 'score') game = { mode, shapes: pickShapes(), idx:0, results:[], total:0, attempts:0, ok:0 };
+  else game = { mode:'practice', shape, blind: $('#blind').checked, idx:0, results:[], total:0, attempts:0, ok:0 };
+  $('#quitBtn').classList.remove('hidden');
+  startRound();
+}
+// accuracy = how close the drawings were: average round score, i.e. total ÷ (rounds × 100). A full game is score ÷ 500.
+const round1 = v => Math.round(v*10)/10;
+const accOf = g => g && g.results.length ? round1(g.total / g.results.length) : null;
+const accFromScore = s => round1(Number(s) / ROUNDS);
+const fmtAcc = v => v == null ? '–' : Number(v).toFixed(1) + '%';
+function currentKey(){ return game.mode === 'score' ? game.shapes[game.idx] : game.shape; }
+function startRound(){
+  if (!game) return;
+  clearTimeout(R && R.timer);
+  $('#revealBar').classList.add('hidden');
+  R = { phase:'peek', tgt: makeTarget(currentKey()), stroke:[], drawing:false, peekEnd: now()+PEEK_MS };
+  setHint('Memorise it', 'gold'); updateHud(); pushPresence();
+}
+function toDark(){
+  R.phase = 'dark';
+  const lbl = SHAPES[R.tgt.key].label.toLowerCase();
+  setHint(game.mode==='practice' && !game.blind ? `Trace the ${lbl}` : `Draw the ${lbl} from memory in one stroke`);
+}
+function finishStroke(tooSlow){
+  if (!R || R.phase !== 'dark') return;
+  R.drawing = false; game.attempts++;
+  const s = R.stroke, t = R.tgt;
+  let err = null;
+  if (tooSlow) err = 'Too slow! You have 10 seconds.';
+  else if (s.length < 5 || pathLen(s) < 0.3*t.len) err = 'Too short. Draw the whole shape in one stroke without lifting.';
+  else { const a = bbox(s), b = bbox(t.pts); if (Math.hypot(a.w,a.h) < 0.3*Math.hypot(b.w,b.h)) err = 'Too small. Draw it the size you saw.'; }
+  if (!err && SHAPES[t.key].closed && Math.hypot(s[0][0]-s[s.length-1][0], s[0][1]-s[s.length-1][1]) > Math.max(30, 0.35*t.L)) err = 'Close the shape. Finish where you started.';
+  if (err){ Sound.reject(); R.phase = 'rejected'; setHint(err + ' Fresh peek coming…', 'bad'); R.timer = setTimeout(startRound, 1700); updateHud(); pushPresence(); return; }
+
+  const score = evaluate(s, t.pts, t.L);
+  Sound.reveal(score);
+  R.phase = 'reveal'; R.revealStart = now(); R.score = score;
+  R.cols = s.map(p => colorFor(polyDist(p, t.pts), t.L));
+  game.ok++;
+  if (game.mode === 'score'){ game.results.push({ key:t.key, score, stroke:s, target:t.pts, L:t.L }); game.total += score; }
+  setHint(''); showRevealBar(); updateHud(); pushPresence();
+}
+function showRevealBar(){
+  const lbl = SHAPES[R.tgt.key].label;
+  $('#revLabel').textContent = game.mode==='score' ? `Round ${game.idx+1}/${ROUNDS} · ${lbl}` : `Practice · ${lbl}`;
+  const a = $('#revActions'); a.innerHTML = '';
+  const add = (txt, fn, ghost) => { const b = document.createElement('button'); b.className = 'btn small' + (ghost ? ' ghost' : ''); b.textContent = txt; b.onclick = fn; a.appendChild(b); return b; };
+  if (game.mode === 'score') add(game.idx+1 < ROUNDS ? 'Next round →' : 'See results →', nextRound).focus();
+  else { add('Again', startRound).focus(); add('Shapes', () => { endGame(); show('#practice'); }, true); }
+  $('#revealBar').classList.remove('hidden');
+}
+function nextRound(){
+  if (!game || game.mode !== 'score') return;
+  game.idx++;
+  if (game.idx >= ROUNDS) showResults(); else startRound();
+}
+function endGame(){
+  clearTimeout(R && R.timer);
+  game = null; R = null;
+  $('#revealBar').classList.add('hidden'); $('#quitBtn').classList.add('hidden');
+  setHint(''); updateHud(); pushPresence();
+}
+async function showResults(){
+  const g = game; endGame();
+  const total = Math.round(g.total*10)/10;
+  const acc = accFromScore(total);
+  $('#resMode').textContent = `Game over · Accuracy ${fmtAcc(acc)} (${total.toFixed(1)} of 500)`;
+  $('#resTotal').textContent = total.toFixed(1);
+  const grid = $('#resGrid'); grid.innerHTML = '';
+  for (const r of g.results){
+    const d = document.createElement('div'); d.className = 'mini';
+    d.innerHTML = `<canvas width="240" height="240"></canvas><div class="v">${r.score.toFixed(1)}</div><div class="sub">${esc(SHAPES[r.key].label)}</div>`;
+    grid.appendChild(d);
+    const c = d.querySelector('canvas').getContext('2d'), f = fitTo(r.target, r.stroke, r.L, 240, 16);
+    drawReveal(c, f.t, f.u, f.L, 1, 4);
+  }
+  show('#results');
+  const best = g.results.reduce((a, b) => b.score > a.score ? b : a);
+  const row = {
+    name: fmtName(player.name), photo: player.photo, color: player.color, score: total, acc,
+    rounds: Object.fromEntries(g.results.map(r => [r.key, r.score])),
+    best: makeBest(best.key, best.score, best.target, best.stroke, best.L),
+  };
+  $('#resNote').textContent = 'Saving to the leaderboard…';
+  try { const where = await Net.save(row); $('#resNote').textContent = where === 'shared' ? 'Saved to the shared leaderboard.' : where === 'local-fallback' ? 'The shared leaderboard could not be reached, so this score was saved in this browser only.' : 'Saved to the leaderboard in this browser.'; }
+  catch (e) { console.error(e); $('#resNote').textContent = 'Could not save this score.'; }
+}
+
+/* ================= Render loop ================= */
+function render(){
+  requestAnimationFrame(render);
+  if (!W) return;
+  const t = now();
+  if (R && R.phase === 'peek' && t >= R.peekEnd) toDark();
+  if (R && R.phase === 'dark' && R.drawing && t - R.drawStart > MAX_DRAW_MS) finishStroke(true);
+
+  const ph = R ? R.phase : 'idle';
+  const want = ph==='dark' || ph==='rejected' ? 1 : ph==='reveal' ? .55 : 0;
+  darkAmt += (want - darkAmt) * .12;
+
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  const g = ctx.createLinearGradient(0,0,0,H); g.addColorStop(0,'#1D1710'); g.addColorStop(1,'#120D09'); ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
+  ctx.fillStyle = `rgba(8,5,3,${darkAmt*.92})`; ctx.fillRect(0,0,W,H);
+  const tw = t/1000;
+  for (const [x,y,r,p] of stars){ ctx.globalAlpha = (1-darkAmt)*(.35+.35*Math.sin(tw*1.3+p*9)); ctx.fillStyle='#FFD9A8'; ctx.fillRect(x,y,r,r); }
+  ctx.globalAlpha = 1;
+  if (!R) return;
+
+  if (ph === 'peek'){
+    const left = clamp((R.peekEnd - t)/PEEK_MS, 0, 1);
+    strokePath(ctx, R.tgt.pts, '#FFC65C', 5, 22);
+    ctx.fillStyle = 'rgba(255,122,69,.9)'; ctx.fillRect(0, H-5, W*left, 5);
+  }
+  if (ph === 'dark' || ph === 'rejected'){
+    if (game && game.mode==='practice' && !game.blind) strokePath(ctx, R.tgt.pts, 'rgba(255,198,92,.28)', 4);
+    strokePath(ctx, R.stroke, ph==='rejected' ? 'rgba(255,92,61,.6)' : 'rgba(245,239,227,.92)', 4, ph==='rejected' ? 0 : 6);
+    if (R.drawing){ const left = clamp(1-(t-R.drawStart)/MAX_DRAW_MS, 0, 1); ctx.fillStyle = left < .3 ? 'rgba(255,92,61,.85)' : 'rgba(245,239,227,.35)'; ctx.fillRect(0, H-4, W*left, 4); }
+  }
+  if (ph === 'reveal'){
+    const k = clamp((t - R.revealStart)/700, 0, 1), e = 1-(1-k)**3;
+    ctx.save(); ctx.globalAlpha = e; strokePath(ctx, R.tgt.pts, '#FFC65C', 4, 18); ctx.restore();
+    strokeColored(ctx, R.stroke, R.cols, 4);
+    const shown = R.score * clamp((t - R.revealStart)/1100, 0, 1);
+    $('#bigScore').innerHTML = shown.toFixed(1) + '<small>%</small>';
+  }
+}
+
+/* ================= Input ================= */
+const ptOf = e => { const r = canvas.getBoundingClientRect(); return [e.clientX-r.left, e.clientY-r.top]; };
+canvas.addEventListener('pointerdown', e => {
+  Sound.ensure();   // browsers allow audio only after a click
+  if (!R || R.phase !== 'dark' || R.drawing) return;
+  e.preventDefault(); canvas.setPointerCapture(e.pointerId);
+  R.drawing = true; R.drawStart = now(); R.stroke = [ptOf(e)]; setHint('');
+});
+canvas.addEventListener('pointermove', e => {
+  if (!R || !R.drawing) return;
+  const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
+  for (const ev of (evs.length ? evs : [e])) R.stroke.push(ptOf(ev));
+});
+const up = () => { if (R && R.drawing) finishStroke(false); };
+canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', up);
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && R && (R.phase==='peek' || R.phase==='dark')){ if (R.drawing && game) game.attempts++; R.drawing = false; R.phase = 'rejected'; setHint('You switched away. Fresh peek coming…', 'bad'); R.timer = setTimeout(startRound, 1500); }
+});
+addEventListener('keydown', e => {
+  if (e.key === 'Enter' && R && R.phase === 'reveal'){ e.preventDefault(); game.mode==='score' ? nextRound() : startRound(); }
+});
+$('#quitBtn').onclick = () => { if (confirm('Quit this game? It will not be saved.')){ endGame(); show('#setup'); } };
+
+/* ================= HUD / overlays ================= */
+function setHint(txt, cls){ const h = $('#hint'); h.textContent = txt; h.className = cls || ''; }
+function updateHud(){
+  if (!game){ $('#hudLeft').textContent = ''; $('#hudRight').textContent = ''; return; }
+  const lbl = SHAPES[currentKey()].label;
+  $('#hudLeft').innerHTML = game.mode==='score' ? `Round <b>${game.idx+1}/${ROUNDS}</b> · ${esc(lbl)}` : `Practice · ${esc(lbl)}${game.blind ? '' : ' (lights on)'}`;
+  $('#hudRight').textContent = game.mode==='score' ? `Total ${game.total.toFixed(1)} · Accuracy ${fmtAcc(accOf(game))}` : '';
+}
+function hideOverlays(){ document.querySelectorAll('.overlay').forEach(o => o.classList.add('hidden')); }
+function show(sel){ hideOverlays(); $(sel).classList.remove('hidden'); }
+
+/* ================= Player setup ================= */
+const saved = readLS(LS_PLAYER, {});
+const player = { name: saved.name || '', photo: saved.photo || '', color: saved.color || SWATCHES[Math.floor(Math.random()*SWATCHES.length)] };
+let photo = null; // { img, url, ox, oy, zoom }
+const crop = $('#crop'), cctx = crop.getContext('2d');
+
+function drawCropTo(c, size){
+  c.clearRect(0,0,size,size);
+  if (!photo) return;
+  const { img } = photo, sc = size/Math.min(img.width, img.height)*photo.zoom;
+  c.save(); c.beginPath(); c.arc(size/2, size/2, size/2, 0, Math.PI*2); c.clip();
+  c.drawImage(img, size/2 - photo.ox*sc, size/2 - photo.oy*sc, img.width*sc, img.height*sc); c.restore();
+}
+function clampCrop(){
+  const { img } = photo, sc = 160/Math.min(img.width, img.height)*photo.zoom, h = 80/sc;
+  photo.ox = clamp(photo.ox, h, img.width-h); photo.oy = clamp(photo.oy, h, img.height-h);
+}
+function redrawCrop(){
+  if (photo){ clampCrop(); drawCropTo(cctx, 160); }
+  else { cctx.clearRect(0,0,160,160); cctx.fillStyle='#B8A88F'; cctx.font='600 15px Segoe UI, system-ui, sans-serif'; cctx.textAlign='center'; cctx.fillText('Your photo', 80, 86); }
+  player.photo = exportPhoto();
+  persistPlayer(); validate();
+}
+function exportPhoto(){
+  if (!photo) return player.photo && !photo ? player.photo : '';
+  const c = document.createElement('canvas'); c.width = c.height = 96;
+  drawCropTo(c.getContext('2d'), 96);
+  try { return c.toDataURL('image/jpeg', .78); } catch { return photo.url || ''; }
+}
+async function loadPhoto(src, remote){
+  const img = new Image();
+  if (remote) img.crossOrigin = 'anonymous';
+  img.onerror = () => { if (remote && img.crossOrigin){ const i2 = new Image(); i2.onload = () => setPhoto(i2, src); i2.src = src; } };
+  img.onload = () => setPhoto(img, remote ? src : null);
+  img.src = src;
+}
+async function setPhoto(img, url){
+  photo = { img, url, ox: img.width/2, oy: img.height*0.42, zoom: 1 };
+  if ('FaceDetector' in window){
+    try {
+      const f = await new FaceDetector({ fastMode:true }).detect(img);
+      if (f[0]){ const b = f[0].boundingBox; photo.ox = b.x+b.width/2; photo.oy = b.y+b.height/2; photo.zoom = clamp(Math.min(img.width,img.height)/(b.width*2), 1, 4); }
+    } catch {}
+  }
+  $('#zoom').value = photo.zoom; redrawCrop();
+}
+$('#file').onchange = e => { const f = e.target.files[0]; if (!f) return; const r = new FileReader(); r.onload = () => loadPhoto(r.result, false); r.readAsDataURL(f); };
+$('#zoom').oninput = e => { if (!photo) return; photo.zoom = +e.target.value; redrawCrop(); };
+let drag = null;
+crop.addEventListener('pointerdown', e => { if (!photo) return; crop.setPointerCapture(e.pointerId); drag = [e.clientX, e.clientY]; crop.style.cursor='grabbing'; });
+crop.addEventListener('pointermove', e => {
+  if (!drag) return;
+  const k = 160/crop.getBoundingClientRect().width, sc = 160/Math.min(photo.img.width, photo.img.height)*photo.zoom;
+  photo.ox -= (e.clientX-drag[0])*k/sc; photo.oy -= (e.clientY-drag[1])*k/sc; drag = [e.clientX, e.clientY]; clampCrop(); drawCropTo(cctx, 160);
+});
+const endDrag = () => { if (!drag) return; drag = null; crop.style.cursor='grab'; redrawCrop(); };
+crop.addEventListener('pointerup', endDrag); crop.addEventListener('pointercancel', endDrag);
+
+$('#name').value = player.name;
+$('#name').oninput = e => { player.name = e.target.value; persistPlayer(); validate(); };
+// Ring colour is picked at random for each player (kept for their next visit); there is no picker.
+if (!SWATCHES.includes(player.color)) player.color = SWATCHES[Math.floor(Math.random()*SWATCHES.length)];
+function renderSwatches(){ document.documentElement.style.setProperty('--ring', player.color); persistPlayer(); }
+function persistPlayer(){ writeLS(LS_PLAYER, { name: player.name, photo: player.photo, color: player.color }); }
+function validate(){
+  const ok = fmtName(player.name).length > 0 && !!player.photo;
+  $('#playBtn').disabled = $('#practiceBtn').disabled = !ok;
+  const needName = !fmtName(player.name), needPhoto = !player.photo;
+  const tip = needName && needPhoto ? 'Add your name and upload a photo first' : needPhoto ? 'Upload a photo first' : needName ? 'Add your name first' : '';
+  for (const w of [$('#playWrap'), $('#practiceWrap')]){ w.classList.toggle('locked', !ok); w.dataset.tip = tip; }
+  $('#setupNote').textContent = ok ? `Playing as ${fmtName(player.name)}. Scores are only saved after all ${ROUNDS} rounds.` : 'Add your name and photo to play.';
+}
+if (player.photo){ const img = new Image(); img.onload = () => { photo = { img, url:null, ox:img.width/2, oy:img.height/2, zoom:1 }; drawCropTo(cctx,160); }; img.src = player.photo; }
+else redrawCrop();
+
+// hovering a locked button also highlights what's missing
+for (const w of [$('#playWrap'), $('#practiceWrap')]){
+  w.addEventListener('mouseenter', () => { if (!w.classList.contains('locked')) return; if (!player.photo) $('#uploadBtn').classList.add('nudge'); if (!fmtName(player.name)) $('#name').classList.add('nudge'); });
+  w.addEventListener('mouseleave', () => { $('#uploadBtn').classList.remove('nudge'); $('#name').classList.remove('nudge'); });
+}
+$('#playBtn').onclick = () => { show('#tips'); $('#tipsGo').focus(); };
+$('#tipsGo').onclick = () => startGame('score');
+$('#tipsPractice').onclick = () => show('#practice');
+$('#tipsBack').onclick = () => show('#setup');
+$('#practiceBtn').onclick = () => show('#practice');
+$('#practiceBack').onclick = () => show('#setup');
+$('#againBtn').onclick = () => startGame('score');
+$('#resPractice').onclick = () => show('#practice');
+$('#resMenu').onclick = () => show('#setup');
+$('#shapeGrid').innerHTML = ACTIVE_SHAPES.map(k => `<button class="shapeBtn" data-k="${k}">${shapeSvg(k)}${esc(SHAPES[k].label)}</button>`).join('');
+$('#shapeGrid').onclick = e => { const b = e.target.closest('.shapeBtn'); if (b) startGame('practice', b.dataset.k); };
+if (SHAPE_MODE === 'event') $('#today').innerHTML = pickShapes().map(k => `<span class="chip">${shapeSvg(k)}${esc(SHAPES[k].label)}</span>`).join('');
+else { $('#todayLbl').classList.add('hidden'); $('#today').classList.add('hidden'); }
+
+/* ================= Handbook bridge ================= */
+if (window.parent !== window) HANDBOOK_ORIGINS.forEach(o => { try { window.parent.postMessage({ type:'happyhour:ready' }, o); } catch {} });
+addEventListener('message', e => {
+  if (!HANDBOOK_ORIGINS.includes(e.origin)) return;
+  const d = e.data; if (!d || d.type !== 'happyhour:profile') return;
+  if (typeof d.name === 'string' && d.name.trim()){ player.name = d.name.slice(0, 40); $('#name').value = player.name; persistPlayer(); }
+  if (typeof d.photo === 'string' && /^https:\/\//.test(d.photo) && d.photo.length < 400) loadPhoto(d.photo, true);
+  validate();
+});
+
+/* ================= Avatars ================= */
+function avatar(p, sm){
+  const ring = esc(p.color || '#888'), cls = 'avatar' + (sm ? ' sm' : '');
+  if (p.photo && /^(data:image\/|https:\/\/)/.test(p.photo)) return `<img class="${cls}" style="--ring:${ring}" src="${esc(p.photo)}" alt="">`;
+  return `<div class="${cls}" style="--ring:${ring};background:${ring}">${esc(fmtName(p.name).charAt(0) || '?')}</div>`;
+}
+
+/* ================= Playing now (same pattern as Type Blaster) ================= */
+// Each live player shares only name, small photo, round, score and accuracy. Nobody can see anyone's drawing.
+function liveAvatar(){
+  // keep what we broadcast small: a short https photo link, or a tiny 56px thumbnail
+  if (photo && photo.url && /^https:\/\//.test(photo.url) && photo.url.length < 400) return photo.url;
+  if (!photo) return '';
+  try { const c = document.createElement('canvas'); c.width = c.height = 96; drawCropTo(c.getContext('2d'), 96); return c.toDataURL('image/jpeg', 0.72); } catch { return ''; }
+}
+let liveCache = '';
+function myStatus(){
+  if (!game) return null;
+  const lbl = SHAPES[currentKey()].label;
+  return game.mode === 'score'
+    ? { status:'playing', round: game.idx+1, shape: lbl, total: Math.round(game.total*10)/10, acc: accOf(game), practice:false }
+    : { status:'playing', round: null, shape: lbl, total: null, acc: null, practice:true };
+}
+function pushPresence(){
+  const s = myStatus();
+  if (s && !liveCache) liveCache = liveAvatar();
+  if (!s) liveCache = '';
+  Net.setMe(s ? { ts: Date.now(), id: MY_ID, name: fmtName(player.name) || 'Anon', photo: liveCache, color: player.color, ...s } : null);
+}
+let liveRows = {};
+function liveNote(t){ liveRows = {}; $('#playList').innerHTML = '<div class="liveEmpty">' + esc(t) + '</div>'; }
+function renderPlaying(){
+  if (!Net.live && !Net.bc){ liveNote('Live view is off. Connect Supabase to see who is playing.'); return; }
+  const map = { ...Net.peers };
+  if (Net.me) map[MY_ID] = Net.me;
+  const players = Object.values(map).filter(p => p && p.status && p.status !== 'idle');
+  if (!players.length){ liveNote('Nobody is playing right now.'); return; }
+  const listEl = $('#playList');
+  if (listEl.querySelector('.liveEmpty')) listEl.innerHTML = '';
+  players.sort((a, b) => (b.total ?? -1) - (a.total ?? -1));
+  const keep = {};
+  players.forEach((p, i) => {
+    const id = p.id || p.name; keep[id] = true; livePlayers[id] = p;
+    const small = p.practice
+      ? `Practice · ${p.shape}`
+      : `Round ${p.round}/${ROUNDS} · ${p.shape} · ${Number(p.total).toFixed(1)}` + (p.acc != null ? ` · ${fmtAcc(p.acc)}` : '');
+    let r = liveRows[id];
+    if (!r){ // new player: build once, then only update text in place (no flicker)
+      const row = document.createElement('div'); row.className = 'liveRow';
+      const av = document.createElement('span'); av.className = 'liveAv zoomable'; av.dataset.zoom = 'l:' + id;
+      const txt = document.createElement('span'); txt.className = 'liveTxt';
+      const b = document.createElement('b'), sm = document.createElement('small'); b.className = 'zoomable'; b.dataset.zoom = 'l:' + id;
+      txt.append(b, sm);
+      const dot = document.createElement('i'); dot.className = 'liveDot';
+      row.append(av, txt, dot);
+      r = liveRows[id] = { row, av, b, sm, avKey:'' };
+    }
+    const avKey = (p.photo || '') + '|' + (p.color || '');
+    if (r.avKey !== avKey){ r.av.innerHTML = avatar(p, true); r.avKey = avKey; }
+    const nm = p.name + (p.id === MY_ID ? ' (you)' : '');
+    if (r.b.textContent !== nm) r.b.textContent = nm;
+    if (r.sm.textContent !== small) r.sm.textContent = small;
+    if (listEl.children[i] !== r.row) listEl.insertBefore(r.row, listEl.children[i] || null);
+  });
+  for (const id of Object.keys(liveRows)) if (!keep[id]){ if (zoomEl && liveRows[id].row.contains(zoomEl)) hideZoom(); liveRows[id].row.remove(); delete liveRows[id]; delete livePlayers[id]; }
+}
+// one steady heartbeat while playing, like Type Blaster
+setInterval(() => { if (Net.me){ Net.me.ts = Date.now(); Net.flush(); } }, 2500);
+document.addEventListener('visibilitychange', () => { if (!document.hidden && Net.me) Net.flush(); });
+
+/* ================= Leaderboard (same table as Type Blaster) ================= */
+const MAX_LB = 15;
+let boardRows = [];
+function renderBoard(){
+  const all = (Net.scores || []).filter(r => !r.demo);
+  // champions: best single round per shape
+  champRecs = {};
+  $('#champs').innerHTML = ACTIVE_SHAPES.map(k => {
+    let best = null;
+    for (const r of all){ const v = r.rounds && r.rounds[k]; if (v != null && (!best || v > best.v)) best = { v, r }; }
+    if (best) champRecs[k] = best.r;
+    return `<div class="champ" title="${esc(SHAPES[k].label)}">${shapeSvg(k)}<div class="v">${best ? Number(best.v).toFixed(1) : '–'}</div>${best ? `<span class="zoomable" data-zoom="c:${k}" data-zoom-note="Best ${esc(SHAPES[k].label.toLowerCase())}: ${Number(best.v).toFixed(1)}">${avatar(best.r, true)}</span>` : ''}</div>`;
+  }).join('');
+  // top 15 games, highest score first
+  boardRows = all.slice().sort((a, b) => Number(b.score) - Number(a.score)).slice(0, MAX_LB);
+  const tb = $('#boardBody');
+  if (!boardRows.length){ tb.innerHTML = '<tr><td colspan="6" class="lbEmpty">No scores yet — be the first!</td></tr>'; return; }
+  const medals = ['🥇','🥈','🥉'];
+  tb.innerHTML = boardRows.map((r, i) => {
+    const best = r.best && SHAPES[r.best.k] ? `<span class="lbBest" title="${esc(SHAPES[r.best.k].label)} ${Number(r.best.s).toFixed(1)}">${shapeSvg(r.best.k)}</span>` : '-';
+    return `<tr data-i="${i}">
+      <td class="rank">${i < 3 ? `<span class="medal" title="${['1st','2nd','3rd'][i]}">${medals[i]}</span>` : i+1}</td>
+      <td class="lbPhoto"><span class="zoomable" data-zoom="b:${i}" data-zoom-note="${Number(r.score).toFixed(1)} / 500">${avatar(r, true)}</span></td>
+      <td class="lbName"><span class="zoomable" data-zoom="b:${i}" data-zoom-note="${Number(r.score).toFixed(1)} / 500">${esc(fmtName(r.name))}</span></td>
+      <td>${Number(r.score).toFixed(1)}</td>
+      <td>${fmtAcc(accFromScore(r.score))}</td>
+      <td>${best}</td>
+    </tr>`;
+  }).join('');
+}
+const peek = $('#peekCard'), pctx = peek.querySelector('canvas').getContext('2d');
+$('#boardBody').addEventListener('mouseover', e => {
+  if (game || e.target.closest('[data-zoom]')){ peek.classList.add('hidden'); return; }
+  const row = e.target.closest('tr[data-i]'); if (!row){ peek.classList.add('hidden'); return; }
+  const r = boardRows[+row.dataset.i]; if (!r || !r.best || !r.best.t) return;
+  pctx.setTransform(1,0,0,1,0,0); pctx.clearRect(0,0,320,320); pctx.setTransform(3.2,0,0,3.2,0,0);
+  drawReveal(pctx, r.best.t, r.best.u, r.best.L, 1, 1.4);
+  $('#peekLabel').textContent = `${fmtName(r.name)}'s best: ${SHAPES[r.best.k].label} ${Number(r.best.s).toFixed(1)}`;
+  const b = row.getBoundingClientRect();
+  peek.classList.remove('hidden');
+  peek.style.left = Math.max(8, b.left - 190) + 'px';
+  peek.style.top = clamp(b.top - 60, 8, innerHeight - 220) + 'px';
+});
+$('#boardBody').addEventListener('mouseleave', () => peek.classList.add('hidden'));
+
+/* ================= Photo zoom on hover ================= */
+// Hover a photo or name in Leaderboard, Shape champions or Playing now to see a larger photo.
+// Closes when the pointer leaves, and never opens while a game is in progress.
+const zoomCard = $('#zoomCard');
+let champRecs = {}, livePlayers = {}, zoomEl = null;
+function zoomRecord(key){
+  const [kind, id] = [key.slice(0, 1), key.slice(2)];
+  if (kind === 'b') return boardRows[+id];
+  if (kind === 'c') return champRecs[id];
+  if (kind === 'l') return livePlayers[id];
+  return null;
+}
+function hideZoom(){ zoomEl = null; zoomCard.classList.add('hidden'); }
+function showZoom(el){
+  if (game) return hideZoom();                       // not during play
+  const p = zoomRecord(el.dataset.zoom); if (!p) return hideZoom();
+  zoomEl = el;
+  peek.classList.add('hidden');
+  const ring = p.color || '#888', name = fmtName(p.name) || 'Player';
+  const pic = p.photo && /^(data:image\/|https:\/\/)/.test(p.photo)
+    ? `<img src="${esc(p.photo)}" alt="">`
+    : `<span class="zoomInitial" style="background:${esc(ring)}">${esc(name.charAt(0))}</span>`;
+  const extra = el.dataset.zoomNote ? `<div class="zoomNote">${esc(el.dataset.zoomNote)}</div>` : '';
+  zoomCard.innerHTML = `<div class="zoomPic" style="--ring:${esc(ring)}">${pic}</div><div class="zoomName">${esc(name)}</div>${extra}`;
+  zoomCard.classList.remove('hidden');
+  const b = el.getBoundingClientRect(), w = zoomCard.offsetWidth, h = zoomCard.offsetHeight;
+  let x = b.right + 10;                               // to the right of the photo/name…
+  if (x + w > innerWidth - 8) x = b.left - w - 10;     // …or to the left near the screen edge
+  zoomCard.style.left = clamp(x, 8, innerWidth - w - 8) + 'px';
+  zoomCard.style.top = clamp(b.top + b.height / 2 - h / 2, 8, innerHeight - h - 8) + 'px';
+}
+document.addEventListener('mouseover', e => {
+  const el = e.target.closest && e.target.closest('[data-zoom]');
+  if (el){ if (el !== zoomEl) showZoom(el); }
+  else if (zoomEl) hideZoom();
+});
+document.addEventListener('mouseleave', hideZoom);
+addEventListener('scroll', hideZoom, true);
+addEventListener('blur', hideZoom);
+
+
+/* ================= Network (Supabase, or this browser only) ================= */
+function setNote(badge, text){ $('#demoBadge').textContent = badge; $('#demoText').textContent = text; $('#demoNote').classList.remove('hidden'); }
+const localScores = () => readLS(LS_SCORES, []).filter(r => !r.demo);   // old sample rows are dropped
+const loadScript = src => new Promise((ok, fail) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = fail; document.head.appendChild(s); });
+const Net = {
+  live:false, ready:false, sb:null, chan:null, bc:null, scores:[], peers:{}, me:null,
+  async init(){
+    try { localStorage.removeItem(LS_SEEDED); } catch {}
+    writeLS(LS_SCORES, localScores());
+    if (SUPABASE_URL && SUPABASE_KEY){
+      try {
+        await loadScript('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2');
+        this.sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, { realtime: { params: { eventsPerSecond: 20 } } });
+        this.live = true;
+      } catch (e) { console.warn('Supabase failed to load', e); setNote('Offline', 'Could not reach Supabase, so scores are saved in this browser only.'); }
+    }
+    if (this.live){
+      liveNote('Nobody is playing right now.');
+      this.sb.channel('shape-scores-feed').on('postgres_changes', { event:'INSERT', schema:'public', table:'shape_scores' }, () => this.loadScores()).subscribe();
+      this.connectLobby();
+      await this.loadScores();
+    } else {
+      setNote(this.sb === null && SUPABASE_URL ? 'Offline' : 'Local mode', SUPABASE_URL ? 'Could not reach Supabase, so scores are saved in this browser only.' : 'Scores are saved in this browser only. Open the game from its hosted address to share scores with everyone.');
+      this.loadScores();
+      addEventListener('storage', e => { if (e.key === LS_SCORES) this.loadScores(); });
+      if ('BroadcastChannel' in window){
+        this.bc = new BroadcastChannel('happy-hour-shapes');
+        this.bc.onmessage = e => { const m = e.data; if (!m || !m.id) return; if (m.leave) delete this.peers[m.id]; else this.peers[m.id] = { ...m, seen: Date.now() }; renderPlaying(); };
+        setInterval(() => { const t = Date.now(); for (const k in this.peers) if (t - this.peers[k].seen > 8000) delete this.peers[k]; renderPlaying(); }, 3000);
+      }
+      renderPlaying();
+    }
+  },
+  connectLobby(){
+    try { if (this.chan) this.sb.removeChannel(this.chan); } catch {}
+    this.ready = false;
+    this.chan = this.sb.channel('happy-hour-shapes', { config:{ presence:{ key: MY_ID } } });
+    this.chan.on('presence', { event:'sync' }, () => {
+      const st = this.chan.presenceState(); this.peers = {};
+      for (const k in st){
+        const m = (st[k] || []).reduce((x, y) => (!x || (y.ts || 0) >= (x.ts || 0)) ? y : x, null);   // latest update per player
+        if (m && m.id && m.id !== MY_ID) this.peers[k] = m;
+      }
+      renderPlaying();
+    }).subscribe(s => {
+      this.ready = (s === 'SUBSCRIBED');
+      if (this.ready){ this.flush(); renderPlaying(); }
+      else if (s === 'CHANNEL_ERROR' || s === 'TIMED_OUT' || s === 'CLOSED') setTimeout(() => this.connectLobby(), 2000);   // reconnect, like Type Blaster
+    });
+  },
+  async loadScores(){
+    if (this.live){
+      const { data, error } = await this.sb.from('shape_scores').select('name,photo,color,score,acc,rounds,best').order('score', { ascending:false }).limit(300);
+      if (error){ console.warn('shape_scores not reachable', error); setNote('Setup needed', 'Supabase could not read the shape_scores table (' + [error.code, error.message].filter(Boolean).join(': ') + '). Run supabase-setup.sql in the Supabase SQL Editor, then refresh. Until then, scores are saved in this browser only.'); this.scores = localScores(); }
+      else { this.scores = data || []; if (!this.saveFailed) $('#demoNote').classList.add('hidden'); }
+    } else this.scores = localScores();
+    renderBoard();
+  },
+  async save(row){
+    let where = 'local';
+    if (this.live){
+      this.scores = (this.scores || []).concat([row]); renderBoard();   // show it at once
+      try { let { error } = await this.sb.from('shape_scores').insert(row);
+        if (error && error.code === '22P02') ({ error } = await this.sb.from('shape_scores').insert({ ...row, acc: Math.round(row.acc) }));   // table still has a whole-number acc column
+        if (error) throw error; where = 'shared'; this.saveFailed = false; }
+      catch (e) { console.warn('Insert failed, saving locally', e); where = 'local-fallback'; this.saveFailed = true; setNote('Not saved to Supabase', 'Supabase refused the score (' + [e.code, e.message].filter(Boolean).join(': ') + '). It was saved in this browser only.'); }
+    }
+    if (where !== 'shared'){ const a = localScores(); a.push(row); writeLS(LS_SCORES, a); }
+    await this.loadScores();
+    return where;
+  },
+  setMe(p){ const was = this.me; this.me = p; if (p || was) this.flush(); renderPlaying(); },
+  flush(){
+    if (this.live){ if (!this.ready) return; this.me ? this.chan.track(this.me) : this.chan.untrack(); }
+    else if (this.bc) this.bc.postMessage(this.me ? this.me : { id: MY_ID, leave: true });
+  },
+};
+addEventListener('pagehide', () => { Net.me = null; Net.flush(); });
+
+
+/* ================= Sound (original, generated in the browser; no audio files) ================= */
+// After each drawing: a short pencil-lift "shff", then a chime whose notes depend on the score.
+const LS_MUTED = 'sketchy-memory-muted';
+const Sound = {
+  ctx: null, muted: !!readLS(LS_MUTED, false),
+  ensure(){
+    if (this.ctx) { if (this.ctx.state === 'suspended') this.ctx.resume().catch(() => {}); return this.ctx; }
+    const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return null;
+    try { this.ctx = new AC(); } catch { return null; }
+    return this.ctx;
+  },
+  note(freq, at, dur = .5, type = 'triangle', vol = .16){
+    const c = this.ctx, o = c.createOscillator(), g = c.createGain();
+    o.type = type; o.frequency.setValueAtTime(freq, at);
+    g.gain.setValueAtTime(0.0001, at);
+    g.gain.exponentialRampToValueAtTime(vol, at + .015);
+    g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+    o.connect(g).connect(c.destination); o.start(at); o.stop(at + dur + .05);
+    return o;
+  },
+  pencil(at){   // soft paper swish: filtered noise, 90 ms
+    const c = this.ctx, len = Math.floor(c.sampleRate * .09), buf = c.createBuffer(1, len, c.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = (Math.random()*2 - 1) * (1 - i/len);
+    const src = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain();
+    src.buffer = buf; f.type = 'bandpass'; f.frequency.value = 2600; f.Q.value = .9; g.gain.value = .22;
+    src.connect(f).connect(g).connect(c.destination); src.start(at);
+  },
+  reveal(score){
+    if (this.muted || !this.ensure()) return;
+    const t = this.ctx.currentTime + .02;
+    this.pencil(t);
+    // marimba-like notes on a D major pentatonic; better drawings climb higher
+    const D4 = 293.66, F4s = 369.99, A4 = 440, B4 = 493.88, D5 = 587.33, F5s = 739.99, A5 = 880;
+    const seq = score >= 90 ? [D5, F5s, A5, D5*2]
+              : score >= 75 ? [A4, D5, F5s]
+              : score >= 50 ? [F4s, A4]
+              : null;
+    if (seq) seq.forEach((fq, i) => { this.note(fq, t + .14 + i*.085, .55, 'triangle', .15); this.note(fq*2, t + .14 + i*.085, .18, 'sine', .035); });
+    else { // a friendly "boop-bwoop" for low scores
+      const o = this.note(B4, t + .14, .5, 'sine', .14); o.frequency.exponentialRampToValueAtTime(D4, t + .55);
+    }
+  },
+  reject(){
+    if (this.muted || !this.ensure()) return;
+    const t = this.ctx.currentTime + .01;
+    this.note(220, t, .16, 'square', .045); this.note(196, t + .1, .2, 'square', .04);
+  },
+};
+function renderMute(){ const b = $('#muteBtn'); b.textContent = Sound.muted ? '🔇' : '🔊'; b.title = Sound.muted ? 'Sound off (click to turn on)' : 'Sound on (click to mute)'; b.setAttribute('aria-pressed', Sound.muted ? 'true' : 'false'); }
+$('#muteBtn').onclick = () => { Sound.muted = !Sound.muted; writeLS(LS_MUTED, Sound.muted); renderMute(); if (!Sound.muted){ Sound.ensure(); } };
+renderMute();
+
+/* ================= Boot ================= */
+renderSwatches(); validate(); resize(); renderBoard(); Net.init(); requestAnimationFrame(render);
+</script>
+</body>
+</html>
