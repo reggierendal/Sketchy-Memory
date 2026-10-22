@@ -22,6 +22,13 @@ body{background:radial-gradient(ellipse at 50% 20%,#F8F2E6 0%,#F3EEE3 70%);color
 .app{display:grid;grid-template-columns:260px minmax(0,1fr) 310px;grid-template-areas:"play stage board";gap:14px;padding:12px;height:100vh}
 .panel{background:var(--panel);border:1px solid var(--panel-border);border-radius:14px;padding:16px 16px 10px;overflow:auto;box-shadow:0 4px 24px rgba(34,27,21,.08);min-height:0}
 #playPanel{grid-area:play;display:flex;flex-direction:column}
+#boardPanel{display:flex;flex-direction:column}
+.credit{margin-top:auto;padding-top:12px;border-top:1px solid var(--panel-border);font-size:11.5px;color:var(--muted);text-align:center}
+.credit a{color:var(--accent);text-decoration:none;font-weight:600}
+.credit a:hover{text-decoration:underline}
+#muteBtn{position:absolute;left:12px;bottom:12px;z-index:3;width:32px;height:32px;border-radius:50%;background:rgba(20,14,8,.75);border:1px solid #3A2E22;color:var(--canvas-muted);font-size:14px;line-height:1;cursor:pointer;display:grid;place-items:center;padding:0}
+#muteBtn:hover{border-color:var(--canvas-orange);color:var(--canvas-text)}
+#muteBtn:focus-visible{outline:2px solid var(--canvas-gold);outline-offset:2px}
 .brandFoot{margin-top:auto;padding-top:14px;border-top:1px solid var(--panel-border);display:flex;justify-content:center}
 .brandFoot img{width:110px;max-width:100%;height:auto;display:block}#boardPanel{grid-area:board}.stage{grid-area:stage}
 .panel h2{font-size:13px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);margin:0 0 10px;display:flex;align-items:center;gap:8px}
@@ -190,6 +197,7 @@ input[type=text]:focus{border-color:var(--accent)}
     <canvas id="board"></canvas>
     <div class="hud"><div id="hudLeft"></div><div class="r"><span id="hudRight"></span><button class="btn ghost tiny hidden" id="quitBtn">Quit</button></div></div>
     <div id="hint"></div>
+    <button id="muteBtn" type="button" aria-label="Sound">🔊</button>
 
     <div id="revealBar" class="hidden">
       <div><div class="sub" id="revLabel"></div><div id="bigScore">0.0</div></div>
@@ -297,7 +305,8 @@ input[type=text]:focus{border-color:var(--accent)}
       <tbody id="boardBody"></tbody>
     </table>
     <p class="note hidden" id="demoNote"><span class="badge" id="demoBadge">Demo mode</span><br><span id="demoText">Scores are saved in this browser only. Open a second tab to see "Playing now" update. Add the Supabase URL and key at the top of the script to share with everyone.</span></p>
-  </aside>
+    <div class="credit">Inspired by <a href="https://neal.fun/perfect-circle/" target="_blank" rel="noopener">neal.fun/perfect-circle</a></div>
+</aside>
 </div>
 <div id="zoomCard" class="hidden" aria-hidden="true"></div>
 <div id="peekCard" class="hidden"><canvas width="320" height="320"></canvas><div class="sub" id="peekLabel"></div></div>
@@ -476,9 +485,10 @@ function finishStroke(tooSlow){
   else if (s.length < 5 || pathLen(s) < 0.3*t.len) err = 'Too short. Draw the whole shape in one stroke without lifting.';
   else { const a = bbox(s), b = bbox(t.pts); if (Math.hypot(a.w,a.h) < 0.3*Math.hypot(b.w,b.h)) err = 'Too small. Draw it the size you saw.'; }
   if (!err && SHAPES[t.key].closed && Math.hypot(s[0][0]-s[s.length-1][0], s[0][1]-s[s.length-1][1]) > Math.max(30, 0.35*t.L)) err = 'Close the shape. Finish where you started.';
-  if (err){ R.phase = 'rejected'; setHint(err + ' Fresh peek coming…', 'bad'); R.timer = setTimeout(startRound, 1700); updateHud(); pushPresence(); return; }
+  if (err){ Sound.reject(); R.phase = 'rejected'; setHint(err + ' Fresh peek coming…', 'bad'); R.timer = setTimeout(startRound, 1700); updateHud(); pushPresence(); return; }
 
   const score = evaluate(s, t.pts, t.L);
+  Sound.reveal(score);
   R.phase = 'reveal'; R.revealStart = now(); R.score = score;
   R.cols = s.map(p => colorFor(polyDist(p, t.pts), t.L));
   game.ok++;
@@ -573,6 +583,7 @@ function render(){
 /* ================= Input ================= */
 const ptOf = e => { const r = canvas.getBoundingClientRect(); return [e.clientX-r.left, e.clientY-r.top]; };
 canvas.addEventListener('pointerdown', e => {
+  Sound.ensure();   // browsers allow audio only after a click
   if (!R || R.phase !== 'dark' || R.drawing) return;
   e.preventDefault(); canvas.setPointerCapture(e.pointerId);
   R.drawing = true; R.drawStart = now(); R.stroke = [ptOf(e)]; setHint('');
@@ -935,6 +946,59 @@ const Net = {
   },
 };
 addEventListener('pagehide', () => { Net.me = null; Net.flush(); });
+
+
+/* ================= Sound (original, generated in the browser; no audio files) ================= */
+// After each drawing: a short pencil-lift "shff", then a chime whose notes depend on the score.
+const LS_MUTED = 'sketchy-memory-muted';
+const Sound = {
+  ctx: null, muted: !!readLS(LS_MUTED, false),
+  ensure(){
+    if (this.ctx) { if (this.ctx.state === 'suspended') this.ctx.resume().catch(() => {}); return this.ctx; }
+    const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return null;
+    try { this.ctx = new AC(); } catch { return null; }
+    return this.ctx;
+  },
+  note(freq, at, dur = .5, type = 'triangle', vol = .16){
+    const c = this.ctx, o = c.createOscillator(), g = c.createGain();
+    o.type = type; o.frequency.setValueAtTime(freq, at);
+    g.gain.setValueAtTime(0.0001, at);
+    g.gain.exponentialRampToValueAtTime(vol, at + .015);
+    g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+    o.connect(g).connect(c.destination); o.start(at); o.stop(at + dur + .05);
+    return o;
+  },
+  pencil(at){   // soft paper swish: filtered noise, 90 ms
+    const c = this.ctx, len = Math.floor(c.sampleRate * .09), buf = c.createBuffer(1, len, c.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = (Math.random()*2 - 1) * (1 - i/len);
+    const src = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain();
+    src.buffer = buf; f.type = 'bandpass'; f.frequency.value = 2600; f.Q.value = .9; g.gain.value = .22;
+    src.connect(f).connect(g).connect(c.destination); src.start(at);
+  },
+  reveal(score){
+    if (this.muted || !this.ensure()) return;
+    const t = this.ctx.currentTime + .02;
+    this.pencil(t);
+    // marimba-like notes on a D major pentatonic; better drawings climb higher
+    const D4 = 293.66, F4s = 369.99, A4 = 440, B4 = 493.88, D5 = 587.33, F5s = 739.99, A5 = 880;
+    const seq = score >= 90 ? [D5, F5s, A5, D5*2]
+              : score >= 75 ? [A4, D5, F5s]
+              : score >= 50 ? [F4s, A4]
+              : null;
+    if (seq) seq.forEach((fq, i) => { this.note(fq, t + .14 + i*.085, .55, 'triangle', .15); this.note(fq*2, t + .14 + i*.085, .18, 'sine', .035); });
+    else { // a friendly "boop-bwoop" for low scores
+      const o = this.note(B4, t + .14, .5, 'sine', .14); o.frequency.exponentialRampToValueAtTime(D4, t + .55);
+    }
+  },
+  reject(){
+    if (this.muted || !this.ensure()) return;
+    const t = this.ctx.currentTime + .01;
+    this.note(220, t, .16, 'square', .045); this.note(196, t + .1, .2, 'square', .04);
+  },
+};
+function renderMute(){ const b = $('#muteBtn'); b.textContent = Sound.muted ? '🔇' : '🔊'; b.title = Sound.muted ? 'Sound off (click to turn on)' : 'Sound on (click to mute)'; b.setAttribute('aria-pressed', Sound.muted ? 'true' : 'false'); }
+$('#muteBtn').onclick = () => { Sound.muted = !Sound.muted; writeLS(LS_MUTED, Sound.muted); renderMute(); if (!Sound.muted){ Sound.ensure(); } };
+renderMute();
 
 /* ================= Boot ================= */
 renderSwatches(); validate(); resize(); renderBoard(); Net.init(); requestAnimationFrame(render);
