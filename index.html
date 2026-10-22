@@ -188,7 +188,7 @@ input[type=text]:focus{border-color:var(--accent)}
             <li><b>Reveal:</b> the real shape appears under your drawing, and you score up to 100 for each round.</li>
             <li>Drawings that are too short, too small, too slow or not closed don't count. You get a fresh peek and try again.</li>
             <li>Five rounds, five different shapes. Your total out of 500 goes on the leaderboard. Everyone gets the same shapes today.</li>
-            <li><b>Accuracy</b> is the share of your drawings that counted. Every redraw lowers it, and it breaks ties on the leaderboard.</li>
+            <li><b>Accuracy</b> is how close your drawings were: your score as a percentage of 500. For example, 375.4 / 500 is 75.1%.</li>
             <li>New here? Try <b>Practice</b> first. It is never saved.</li>
           </ul>
         </details>
@@ -397,7 +397,11 @@ function startGame(mode, shape){
   $('#quitBtn').classList.remove('hidden');
   startRound();
 }
-const accOf = g => g && g.attempts ? Math.round(100*g.ok/g.attempts) : 100;
+// accuracy = how close the drawings were: average round score, i.e. total ÷ (rounds × 100). A full game is score ÷ 500.
+const round1 = v => Math.round(v*10)/10;
+const accOf = g => g && g.results.length ? round1(g.total / g.results.length) : null;
+const accFromScore = s => round1(Number(s) / ROUNDS);
+const fmtAcc = v => v == null ? '–' : Number(v).toFixed(1) + '%';
 function currentKey(){ return game.mode === 'score' ? game.shapes[game.idx] : game.shape; }
 function startRound(){
   if (!game) return;
@@ -452,8 +456,8 @@ function endGame(){
 async function showResults(){
   const g = game; endGame();
   const total = Math.round(g.total*10)/10;
-  const acc = accOf(g);
-  $('#resMode').textContent = `Game over · Accuracy ${acc}% (${g.ok} of ${g.attempts} drawings counted)`;
+  const acc = accFromScore(total);
+  $('#resMode').textContent = `Game over · Accuracy ${fmtAcc(acc)} (${total.toFixed(1)} of 500)`;
   $('#resTotal').textContent = total.toFixed(1);
   const grid = $('#resGrid'); grid.innerHTML = '';
   for (const r of g.results){
@@ -542,7 +546,7 @@ function updateHud(){
   if (!game){ $('#hudLeft').textContent = ''; $('#hudRight').textContent = ''; return; }
   const lbl = SHAPES[currentKey()].label;
   $('#hudLeft').innerHTML = game.mode==='score' ? `Round <b>${game.idx+1}/${ROUNDS}</b> · ${esc(lbl)}` : `Practice · ${esc(lbl)}${game.blind ? '' : ' (lights on)'}`;
-  $('#hudRight').textContent = game.mode==='score' ? `Total ${game.total.toFixed(1)} · Accuracy ${accOf(game)}%` : (game.attempts ? `Accuracy ${accOf(game)}%` : '');
+  $('#hudRight').textContent = game.mode==='score' ? `Total ${game.total.toFixed(1)} · Accuracy ${fmtAcc(accOf(game))}` : '';
 }
 function hideOverlays(){ document.querySelectorAll('.overlay').forEach(o => o.classList.add('hidden')); }
 function show(sel){ hideOverlays(); $(sel).classList.remove('hidden'); }
@@ -663,7 +667,7 @@ function myStatus(){
   const lbl = SHAPES[currentKey()].label;
   return game.mode === 'score'
     ? { status:'playing', round: game.idx+1, shape: lbl, total: Math.round(game.total*10)/10, acc: accOf(game), practice:false }
-    : { status:'playing', round: null, shape: lbl, total: null, acc: game.attempts ? accOf(game) : null, practice:true };
+    : { status:'playing', round: null, shape: lbl, total: null, acc: null, practice:true };
 }
 function pushPresence(){
   const s = myStatus();
@@ -686,8 +690,8 @@ function renderPlaying(){
   players.forEach((p, i) => {
     const id = p.id || p.name; keep[id] = true;
     const small = p.practice
-      ? `Practice · ${p.shape}` + (p.acc != null ? ` · ${p.acc}%` : '')
-      : `Round ${p.round}/${ROUNDS} · ${p.shape} · ${Number(p.total).toFixed(1)}` + (p.acc != null ? ` · ${p.acc}%` : '');
+      ? `Practice · ${p.shape}`
+      : `Round ${p.round}/${ROUNDS} · ${p.shape} · ${Number(p.total).toFixed(1)}` + (p.acc != null ? ` · ${fmtAcc(p.acc)}` : '');
     let r = liveRows[id];
     if (!r){ // new player: build once, then only update text in place (no flicker)
       const row = document.createElement('div'); row.className = 'liveRow';
@@ -723,8 +727,8 @@ function renderBoard(){
     for (const r of all){ const v = r.rounds && r.rounds[k]; if (v != null && (!best || v > best.v)) best = { v, r }; }
     return `<div class="champ" title="${esc(SHAPES[k].label)}${best ? ' · ' + esc(fmtName(best.r.name)) : ''}">${shapeSvg(k)}<div class="v">${best ? Number(best.v).toFixed(1) : '–'}</div>${best ? avatar(best.r, true) : ''}</div>`;
   }).join('');
-  // top 15 games, highest score first; ties go to the higher accuracy
-  boardRows = all.slice().sort((a, b) => (Number(b.score) - Number(a.score)) || ((b.acc ?? 0) - (a.acc ?? 0))).slice(0, MAX_LB);
+  // top 15 games, highest score first
+  boardRows = all.slice().sort((a, b) => Number(b.score) - Number(a.score)).slice(0, MAX_LB);
   const tb = $('#boardBody');
   if (!boardRows.length){ tb.innerHTML = '<tr><td colspan="6" class="lbEmpty">No scores yet — be the first!</td></tr>'; return; }
   const medals = ['🥇','🥈','🥉'];
@@ -735,7 +739,7 @@ function renderBoard(){
       <td class="lbPhoto">${avatar(r, true)}</td>
       <td class="lbName">${esc(fmtName(r.name))}</td>
       <td>${Number(r.score).toFixed(1)}</td>
-      <td>${r.acc != null ? r.acc + '%' : '-'}</td>
+      <td>${fmtAcc(accFromScore(r.score))}</td>
       <td>${best}</td>
     </tr>`;
   }).join('');
@@ -806,7 +810,7 @@ const Net = {
   },
   async loadScores(){
     if (this.live){
-      const { data, error } = await this.sb.from('shape_scores').select('name,photo,color,score,acc,rounds,best').order('score', { ascending:false }).order('acc', { ascending:false }).limit(300);
+      const { data, error } = await this.sb.from('shape_scores').select('name,photo,color,score,acc,rounds,best').order('score', { ascending:false }).limit(300);
       if (error){ console.warn('shape_scores not reachable', error); setNote('Setup needed', 'Supabase could not read the shape_scores table (' + [error.code, error.message].filter(Boolean).join(': ') + '). Run supabase-setup.sql in the Supabase SQL Editor, then refresh. Until then, scores are saved in this browser only.'); this.scores = localScores(); }
       else { this.scores = data || []; if (!this.saveFailed) $('#demoNote').classList.add('hidden'); }
     } else this.scores = localScores();
@@ -816,7 +820,9 @@ const Net = {
     let where = 'local';
     if (this.live){
       this.scores = (this.scores || []).concat([row]); renderBoard();   // show it at once
-      try { const { error } = await this.sb.from('shape_scores').insert(row); if (error) throw error; where = 'shared'; this.saveFailed = false; }
+      try { let { error } = await this.sb.from('shape_scores').insert(row);
+        if (error && error.code === '22P02') ({ error } = await this.sb.from('shape_scores').insert({ ...row, acc: Math.round(row.acc) }));   // table still has a whole-number acc column
+        if (error) throw error; where = 'shared'; this.saveFailed = false; }
       catch (e) { console.warn('Insert failed, saving locally', e); where = 'local-fallback'; this.saveFailed = true; setNote('Not saved to Supabase', 'Supabase refused the score (' + [e.code, e.message].filter(Boolean).join(': ') + '). It was saved in this browser only.'); }
     }
     if (where !== 'shared'){ const a = localScores(); a.push(row); writeLS(LS_SCORES, a); }
